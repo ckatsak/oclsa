@@ -1,8 +1,9 @@
 #include <llvm/Pass.h>                // llvm::RegisterPass, llvm::FunctionPass
+#include <llvm/IR/BasicBlock.h>      // llvm::BasicBlock (?)
 #include <llvm/IR/Function.h>         // llvm::Function
-#include <llvm/IR/Module.h>           // llvm::Module
-#include <llvm/IR/Instruction.h>      // llvm::Instruction(?)
+#include <llvm/IR/Instruction.h>      // llvm::Instruction (?)
 #include <llvm/IR/Instructions.h>     // llvm::LoadInst, llvm::StoreInst
+#include <llvm/IR/Module.h>           // llvm::Module
 #include <llvm/Support/raw_ostream.h> // llvm::errs, llvm::raw_ostream
 #include <llvm/PassAnalysisSupport.h> // llvm::AnalysisUsage, llvm::getAnalysis
 #include <llvm/Analysis/LoopInfo.h> // llvm::LoopInfoWrapperPass,llvm::LoopInfo
@@ -39,12 +40,14 @@ constexpr unsigned globalAddressSpace  = 2;
 
 struct BasicBlockStatsData {
   BasicBlockStatsData()
-      : OwnerLoop(nullptr),
+      : ParentFunction(nullptr), ParentLoop(nullptr), LoopDepth(0),
         NumBinOps(0), NumBitBinOps(0), NumVecOps(0), NumAggOps(0),
         NumLoadOps(0), NumStoreOps(0), NumOtherOps(0), NumCallOps(0),
         NumGlobalMemAcc(0), NumLocalMemAcc(0), NumPrivateMemAcc(0) {}
 
-  const llvm::Loop* OwnerLoop;
+  llvm::Function* ParentFunction;
+  const llvm::Loop* ParentLoop;
+  unsigned LoopDepth;
 
   unsigned NumBinOps;
   unsigned NumBitBinOps;
@@ -92,7 +95,9 @@ struct oclsa : public llvm::FunctionPass {
     for (llvm::BasicBlock& bb : CurrFunc) {
       BasicBlockStatsData bbsd{};
 
-      bbsd.OwnerLoop = LI.getLoopFor(&bb);
+      bbsd.ParentFunction = bb.getParent();
+      bbsd.ParentLoop = LI.getLoopFor(&bb);
+      bbsd.LoopDepth = LI.getLoopDepth(&bb);
       for (const llvm::Instruction& inst : bb) {
         evalInstruction(&inst, bbsd);
       }
@@ -151,18 +156,21 @@ void evalInstruction(const llvm::Instruction* instr,
 
 void debug_err_BasicBlockStatsData(BasicBlockStatsData bbsd) {
   llvm::errs() << "\n\tBasicBlock:";
-  llvm::errs() << "\n\t\tOwnerLoop        : " << bbsd.OwnerLoop;
-  llvm::errs() << "\n\t\tNumBinOps        = " << bbsd.NumBinOps;
-  llvm::errs() << "\n\t\tNumBitBinOps     = " << bbsd.NumBitBinOps;
-  llvm::errs() << "\n\t\tNumVecOps        = " << bbsd.NumVecOps;
-  llvm::errs() << "\n\t\tNumAggOps        = " << bbsd.NumAggOps;
-  llvm::errs() << "\n\t\tNumLoadOps       = " << bbsd.NumLoadOps;
-  llvm::errs() << "\n\t\tNumStoreOps      = " << bbsd.NumStoreOps;
-  llvm::errs() << "\n\t\tNumCallOps       = " << bbsd.NumCallOps;
-  llvm::errs() << "\n\t\tNumOtherOps      = " << bbsd.NumOtherOps;
-  llvm::errs() << "\n\t\tNumLocalMemAcc   = " << bbsd.NumLocalMemAcc;
-  llvm::errs() << "\n\t\tNumGlobalMemAcc  = " << bbsd.NumGlobalMemAcc;
-  llvm::errs() << "\n\t\tNumPrivateMemAcc = " << bbsd.NumPrivateMemAcc;
+  llvm::errs() << "\n\t\tParentLoop         = " << bbsd.ParentLoop;
+  llvm::errs() << "\n\t\tParentFunctionName = "
+               << bbsd.ParentFunction->getName().str();
+  llvm::errs() << "\n\t\tLoopDepth          = " << bbsd.LoopDepth;
+  llvm::errs() << "\n\t\tNumBinOps          = " << bbsd.NumBinOps;
+  llvm::errs() << "\n\t\tNumBitBinOps       = " << bbsd.NumBitBinOps;
+  llvm::errs() << "\n\t\tNumVecOps          = " << bbsd.NumVecOps;
+  llvm::errs() << "\n\t\tNumAggOps          = " << bbsd.NumAggOps;
+  llvm::errs() << "\n\t\tNumLoadOps         = " << bbsd.NumLoadOps;
+  llvm::errs() << "\n\t\tNumStoreOps        = " << bbsd.NumStoreOps;
+  llvm::errs() << "\n\t\tNumCallOps         = " << bbsd.NumCallOps;
+  llvm::errs() << "\n\t\tNumOtherOps        = " << bbsd.NumOtherOps;
+  llvm::errs() << "\n\t\tNumLocalMemAcc     = " << bbsd.NumLocalMemAcc;
+  llvm::errs() << "\n\t\tNumGlobalMemAcc    = " << bbsd.NumGlobalMemAcc;
+  llvm::errs() << "\n\t\tNumPrivateMemAcc   = " << bbsd.NumPrivateMemAcc;
   llvm::errs() << '\n';
 }
 
