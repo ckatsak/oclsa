@@ -1,4 +1,6 @@
 *.swp
 .vimrc
 
+__pycache__
+
 _build/
